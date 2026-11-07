@@ -8,6 +8,24 @@ CREATE TABLE IF NOT EXISTS products (
   device_id    uuid    NOT NULL
 );
 
+-- Server-side change counter for products, so devices can ask "what's new?"
+CREATE SEQUENCE IF NOT EXISTS products_seq;
+ALTER TABLE products
+  ADD COLUMN IF NOT EXISTS server_seq bigint NOT NULL DEFAULT nextval('products_seq');
+CREATE INDEX IF NOT EXISTS idx_products_seq ON products(server_seq);
+
+CREATE OR REPLACE FUNCTION bump_product_seq() RETURNS trigger AS $$
+BEGIN
+  NEW.server_seq := nextval('products_seq');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS products_bump_seq ON products;
+CREATE TRIGGER products_bump_seq
+  BEFORE INSERT OR UPDATE ON products
+  FOR EACH ROW EXECUTE FUNCTION bump_product_seq();
+
 -- Append-only ledger. Stock = SUM(delta). received_seq is the server's own ordering.
 CREATE TABLE IF NOT EXISTS stock_movements (
   id            uuid PRIMARY KEY,
@@ -20,6 +38,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
   received_seq  bigserial
 );
 CREATE INDEX IF NOT EXISTS idx_movements_product ON stock_movements(product_id);
+CREATE INDEX IF NOT EXISTS idx_movements_seq ON stock_movements(received_seq);
 
 CREATE TABLE IF NOT EXISTS sales (
   id              uuid PRIMARY KEY,

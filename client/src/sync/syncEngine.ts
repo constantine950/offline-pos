@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { db } from "../db/dexie";
 import { backfillOnce } from "./outbox";
 import { pushOutbox } from "./push";
+import { pullChanges } from "./pull";
 
 interface SyncState {
   syncing: boolean;
@@ -23,7 +24,8 @@ export async function syncNow() {
   useSyncState.setState({ syncing: true });
   try {
     await backfillOnce();
-    await pushOutbox();
+    await pushOutbox(); // send our changes first...
+    await pullChanges(); // ...then get everyone else's
     useSyncState.setState({ lastSyncedAt: Date.now(), lastError: null });
   } catch (e) {
     const msg =

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../../db/dexie";
+import { seedIfEmpty } from "../../db/seed";
 import { getStockMap } from "../inventory/inventoryService";
 import { StockAdjustForm } from "../inventory/StockAdjustForm";
 import { ProductForm } from "./ProductForm";
@@ -28,6 +29,18 @@ export function ProductList() {
         >
           + Add product
         </button>
+      )}
+
+      {products?.length === 0 && !adding && (
+        <div className="rounded-xl bg-white p-4 text-sm shadow">
+          <p className="mb-2 text-neutral-500">
+            No products yet. If another device already has products, they'll
+            appear here once it syncs. Otherwise:
+          </p>
+          <button onClick={() => seedIfEmpty()} className="underline">
+            Load demo products
+          </button>
+        </div>
       )}
 
       {products?.map((p) => {

@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { seedIfEmpty } from "./db/seed";
+import { startSyncEngine } from "./sync/syncEngine";
 import "./index.css";
 
 seedIfEmpty().then(() => {
@@ -10,4 +11,5 @@ seedIfEmpty().then(() => {
       <App />
     </React.StrictMode>,
   );
+  startSyncEngine();
 });

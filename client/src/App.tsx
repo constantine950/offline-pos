@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { CheckoutScreen } from "./features/checkout/CheckoutScreen";
 import { ProductList } from "./features/products/ProductList";
+import { StockList } from "./features/inventory/StockList";
+import { useStockAlerts } from "./features/inventory/useStockAlerts";
 import { SyncBadge } from "./components/SyncBadge";
 import { OfflineBanner } from "./components/OfflineBanner";
 
-type Tab = "checkout" | "products";
+type Tab = "checkout" | "products" | "alerts";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("checkout");
+  const alerts = useStockAlerts();
 
   const tabClass = (t: Tab) =>
     `rounded-lg px-4 py-2 text-sm font-medium ${
@@ -36,9 +39,19 @@ export default function App() {
         >
           Products
         </button>
+        <button className={tabClass("alerts")} onClick={() => setTab("alerts")}>
+          Stock alerts
+          {alerts.length > 0 && (
+            <span className="ml-2 rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
+              {alerts.length}
+            </span>
+          )}
+        </button>
       </nav>
 
-      {tab === "checkout" ? <CheckoutScreen /> : <ProductList />}
+      {tab === "checkout" && <CheckoutScreen />}
+      {tab === "products" && <ProductList />}
+      {tab === "alerts" && <StockList />}
     </div>
   );
 }

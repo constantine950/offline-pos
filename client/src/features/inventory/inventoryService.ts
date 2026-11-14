@@ -58,3 +58,39 @@ export async function adjustStock(
     },
   );
 }
+
+// "I counted the shelf and there are N." Records the difference as an
+// adjustment, so the ledger stays append-only and auditable.
+export async function recountStock(
+  productId: string,
+  counted: number,
+): Promise<StockMovement | null> {
+  if (!Number.isInteger(counted) || counted < 0) {
+    throw new Error("Count must be a whole number, zero or more");
+  }
+
+  return db.transaction(
+    "rw",
+    [db.products, db.stockMovements, db.outbox, db.meta],
+    async () => {
+      if (!(await db.products.get(productId)))
+        throw new Error("Product not found");
+
+      const current = await getStock(productId);
+      const delta = counted - current;
+      if (delta === 0) return null; // already matches
+
+      const movement: StockMovement = {
+        id: newId(),
+        productId,
+        delta,
+        reason: "adjustment",
+        createdAt: Date.now(),
+        deviceId: await getDeviceId(),
+      };
+      await db.stockMovements.add(movement);
+      await enqueue("stockMovement", "create", movement);
+      return movement;
+    },
+  );
+}

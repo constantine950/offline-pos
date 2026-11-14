@@ -1,6 +1,8 @@
 import { db } from "./dexie";
 import { getDeviceId, newId } from "../lib/id";
 import { toKobo } from "../lib/money";
+import { enqueue } from "../sync/outbox";
+import type { Product, StockMovement } from "../types";
 
 const DEMO = [
   { name: "Indomie (carton)", price: 7500, stock: 20 },
@@ -15,25 +17,33 @@ export async function seedIfEmpty() {
   const deviceId = await getDeviceId();
   const now = Date.now();
 
-  await db.transaction("rw", db.products, db.stockMovements, async () => {
-    for (const d of DEMO) {
-      const id = newId();
-      await db.products.add({
-        id,
-        name: d.name,
-        priceKobo: toKobo(d.price),
-        active: true,
-        updatedAt: now,
-        deviceId,
-      });
-      await db.stockMovements.add({
-        id: newId(),
-        productId: id,
-        delta: d.stock,
-        reason: "restock",
-        createdAt: now,
-        deviceId,
-      });
-    }
-  });
+  await db.transaction(
+    "rw",
+    [db.products, db.stockMovements, db.outbox, db.meta],
+    async () => {
+      for (const d of DEMO) {
+        const product: Product = {
+          id: newId(),
+          name: d.name,
+          priceKobo: toKobo(d.price),
+          active: true,
+          updatedAt: now,
+          deviceId,
+        };
+        await db.products.add(product);
+        await enqueue("product", "create", product);
+
+        const movement: StockMovement = {
+          id: newId(),
+          productId: product.id,
+          delta: d.stock,
+          reason: "restock",
+          createdAt: now,
+          deviceId,
+        };
+        await db.stockMovements.add(movement);
+        await enqueue("stockMovement", "create", movement);
+      }
+    },
+  );
 }

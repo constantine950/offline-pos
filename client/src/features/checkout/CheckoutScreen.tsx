@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../../db/dexie";
 import { getStockMap } from "../inventory/inventoryService";
+import { ReceiptView } from "../sales/ReceiptView";
 import { completeSale } from "./saleService";
 import { useCart } from "./cartStore";
 import { formatNaira } from "../../lib/money";
@@ -16,13 +17,13 @@ export function CheckoutScreen() {
   const cart = useCart();
   const [payment, setPayment] = useState<PaymentMethod>("cash");
   const [error, setError] = useState<string | null>(null);
-  const [lastSale, setLastSale] = useState<Sale | null>(null);
+  const [receipt, setReceipt] = useState<Sale | null>(null);
 
   async function checkout() {
     setError(null);
     try {
       const sale = await completeSale(cart.lines, payment);
-      setLastSale(sale);
+      setReceipt(sale);
       cart.clear();
     } catch (e) {
       setError((e as Error).message);
@@ -107,13 +108,12 @@ export function CheckoutScreen() {
             Complete sale
           </button>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-          {lastSale && (
-            <p className="mt-2 text-sm text-green-700">
-              Sold {lastSale.receiptNo}: {formatNaira(lastSale.totalKobo)}
-            </p>
-          )}
         </div>
       </div>
+
+      {receipt && (
+        <ReceiptView sale={receipt} onClose={() => setReceipt(null)} />
+      )}
     </div>
   );
 }

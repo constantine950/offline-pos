@@ -58,3 +58,9 @@ CREATE TABLE IF NOT EXISTS discrepancies (
   detected_at  timestamptz NOT NULL DEFAULT now(),
   resolved     boolean NOT NULL DEFAULT false
 );
+
+-- Server-side change counter for sales, so devices can ask "what's new?"
+CREATE SEQUENCE IF NOT EXISTS sales_seq;
+ALTER TABLE sales
+  ADD COLUMN IF NOT EXISTS server_seq bigint NOT NULL DEFAULT nextval('sales_seq');
+CREATE INDEX IF NOT EXISTS idx_sales_seq ON sales(server_seq);

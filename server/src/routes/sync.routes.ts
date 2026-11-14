@@ -19,6 +19,7 @@ syncRoutes.post("/sync", async (req, res, next) => {
 const pullQuery = z.object({
   productsSince: z.coerce.number().int().min(0).default(0),
   movementsSince: z.coerce.number().int().min(0).default(0),
+  salesSince: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(1000).default(500),
 });
 
@@ -52,7 +53,24 @@ syncRoutes.get("/pull", async (req, res, next) => {
       [q.movementsSince, q.limit],
     );
 
-    res.json({ products: products.rows, movements: movements.rows });
+    const sales = await pool.query(
+      `SELECT id, receipt_no AS "receiptNo", items,
+              total_kobo AS "totalKobo", payment_method AS "paymentMethod",
+              created_at::double precision AS "createdAt",
+              device_id AS "deviceId",
+              server_seq::double precision AS "serverSeq"
+         FROM sales
+        WHERE server_seq > $1
+        ORDER BY server_seq
+        LIMIT $2`,
+      [q.salesSince, q.limit],
+    );
+
+    res.json({
+      products: products.rows,
+      movements: movements.rows,
+      sales: sales.rows,
+    });
   } catch (e) {
     next(e);
   }

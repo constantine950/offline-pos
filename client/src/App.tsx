@@ -3,10 +3,11 @@ import { CheckoutScreen } from "./features/checkout/CheckoutScreen";
 import { ProductList } from "./features/products/ProductList";
 import { StockList } from "./features/inventory/StockList";
 import { useStockAlerts } from "./features/inventory/useStockAlerts";
+import { SalesHistory } from "./features/sales/SalesHistory";
 import { SyncBadge } from "./components/SyncBadge";
 import { OfflineBanner } from "./components/OfflineBanner";
 
-type Tab = "checkout" | "products" | "alerts";
+type Tab = "checkout" | "sales" | "products" | "alerts";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("checkout");
@@ -26,12 +27,15 @@ export default function App() {
 
       <OfflineBanner />
 
-      <nav className="mb-4 flex gap-2">
+      <nav className="mb-4 flex flex-wrap gap-2">
         <button
           className={tabClass("checkout")}
           onClick={() => setTab("checkout")}
         >
           Checkout
+        </button>
+        <button className={tabClass("sales")} onClick={() => setTab("sales")}>
+          Sales
         </button>
         <button
           className={tabClass("products")}
@@ -50,6 +54,7 @@ export default function App() {
       </nav>
 
       {tab === "checkout" && <CheckoutScreen />}
+      {tab === "sales" && <SalesHistory />}
       {tab === "products" && <ProductList />}
       {tab === "alerts" && <StockList />}
     </div>

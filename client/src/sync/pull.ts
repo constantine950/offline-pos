@@ -1,6 +1,6 @@
 import { db } from "../db/dexie";
 import { getJson } from "../lib/api";
-import type { Product, StockMovement } from "../types";
+import type { Product, Sale, StockMovement } from "../types";
 
 const LIMIT = 500;
 const OVERLAP = 25; // re-read a few rows each time; applying twice is harmless
@@ -14,6 +14,7 @@ type PulledMovement = Omit<StockMovement, "saleId"> & {
   saleId: string | null;
   seq: number;
 };
+type PulledSale = Sale & { serverSeq: number };
 
 async function getCursor(key: string): Promise<number> {
   return ((await db.meta.get(key))?.value as number | undefined) ?? 0;
@@ -27,18 +28,21 @@ export async function pullChanges(): Promise<number> {
   for (let page = 0; page < MAX_PAGES; page++) {
     const productsCursor = await getCursor("productsCursor");
     const movementsCursor = await getCursor("movementsCursor");
+    const salesCursor = await getCursor("salesCursor");
 
     const data = await getJson<{
       products: PulledProduct[];
       movements: PulledMovement[];
+      sales: PulledSale[];
     }>(
       `/api/pull?productsSince=${Math.max(0, productsCursor - OVERLAP)}` +
-        `&movementsSince=${Math.max(0, movementsCursor - OVERLAP)}&limit=${LIMIT}`,
+        `&movementsSince=${Math.max(0, movementsCursor - OVERLAP)}` +
+        `&salesSince=${Math.max(0, salesCursor - OVERLAP)}&limit=${LIMIT}`,
     );
 
     await db.transaction(
       "rw",
-      [db.products, db.stockMovements, db.meta],
+      [db.products, db.stockMovements, db.sales, db.meta],
       async () => {
         // Products: newer edit wins. A pending local edit that's newer stays put.
         for (const p of data.products) {
@@ -58,13 +62,13 @@ export async function pullChanges(): Promise<number> {
         }
 
         // Movements: only add the ones we don't have yet.
-        const existing = await db.stockMovements.bulkGet(
+        const existingMovements = await db.stockMovements.bulkGet(
           data.movements.map((m) => m.id),
         );
-        const fresh: StockMovement[] = [];
+        const freshMovements: StockMovement[] = [];
         data.movements.forEach((m, i) => {
-          if (existing[i]) return;
-          fresh.push({
+          if (existingMovements[i]) return;
+          freshMovements.push({
             id: m.id,
             productId: m.productId,
             delta: m.delta,
@@ -74,9 +78,31 @@ export async function pullChanges(): Promise<number> {
             deviceId: m.deviceId,
           });
         });
-        if (fresh.length) {
-          await db.stockMovements.bulkAdd(fresh);
-          changed += fresh.length;
+        if (freshMovements.length) {
+          await db.stockMovements.bulkAdd(freshMovements);
+          changed += freshMovements.length;
+        }
+
+        // Sales never change once made, so just add the ones we don't have.
+        const existingSales = await db.sales.bulkGet(
+          data.sales.map((s) => s.id),
+        );
+        const freshSales: Sale[] = [];
+        data.sales.forEach((s, i) => {
+          if (existingSales[i]) return;
+          freshSales.push({
+            id: s.id,
+            receiptNo: s.receiptNo,
+            items: s.items,
+            totalKobo: s.totalKobo,
+            paymentMethod: s.paymentMethod,
+            createdAt: s.createdAt,
+            deviceId: s.deviceId,
+          });
+        });
+        if (freshSales.length) {
+          await db.sales.bulkAdd(freshSales);
+          changed += freshSales.length;
         }
 
         // Cursors only ever move forward.
@@ -88,6 +114,10 @@ export async function pullChanges(): Promise<number> {
           (mx, m) => Math.max(mx, m.seq),
           0,
         );
+        const maxSale = data.sales.reduce(
+          (mx, s) => Math.max(mx, s.serverSeq),
+          0,
+        );
         await db.meta.put({
           key: "productsCursor",
           value: Math.max(productsCursor, maxProduct),
@@ -96,10 +126,20 @@ export async function pullChanges(): Promise<number> {
           key: "movementsCursor",
           value: Math.max(movementsCursor, maxMovement),
         });
+        await db.meta.put({
+          key: "salesCursor",
+          value: Math.max(salesCursor, maxSale),
+        });
       },
     );
 
-    if (data.products.length < LIMIT && data.movements.length < LIMIT) break;
+    if (
+      data.products.length < LIMIT &&
+      data.movements.length < LIMIT &&
+      data.sales.length < LIMIT
+    ) {
+      break;
+    }
   }
 
   return changed;
